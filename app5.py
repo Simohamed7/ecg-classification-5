@@ -72,7 +72,7 @@ st.title("ECG → Filtrage → FrFT → Image 224x224 → Classification")
 
 uploaded_file = st.file_uploader("Chargez un fichier ECG (.mat ou .csv)", type=["mat", "csv"])
 fs = st.number_input("Fréquence d'échantillonnage (Hz)", value=360)
-fraction_order = st.slider("Ordre de la FrFT (a)", 0.0, 2.0, 1.0, 0.1)
+fraction_order = st.slider("Ordre de la FrFT (a)", 0.01, 1.0, 0.5, 0.01)
 
 if uploaded_file is not None:
     # Charger le signal
@@ -137,3 +137,4 @@ if uploaded_file is not None:
     all_probs = predictions[0]
     for i, class_name in enumerate(CLASS_NAMES):
         st.write(f"{class_name} : {all_probs[i]*100:.2f}%")
+
