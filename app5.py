@@ -8,6 +8,21 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from math import pi
 from PIL import Image
 from tensorflow.keras.models import load_model
+st.title("ECG → Filtrage → FrFT → Image 224x224 → Classification")
+
+st.subheader("📖 Description des arythmies")
+st.write("Cette application classe les battements ECG selon leur type d’arythmie :")
+
+st.write("""
+- **N** : NORMAL  
+- **S** : SUPRAVENTICULAR  
+- **V** : VENTRICULAR  
+- **F** : FUSION  
+- **Q** : UNKNOWN
+""")
+
+# --- Classes réelles ---
+CLASS_NAMES = ['F3', 'N0', 'Q4', 'S1', 'V2']  # Remplace par tes vraies classes
 
 # --- Filtre passe-bande ---
 def bandpass_filter(signal, lowcut=0.5, highcut=50, fs=360, order=4):
@@ -63,7 +78,6 @@ if uploaded_file is not None:
     # Charger le signal
     if uploaded_file.name.endswith(".mat"):
         mat_data = sio.loadmat(uploaded_file)
-        # Sélectionner la première variable qui n'est pas interne
         for key in mat_data.keys():
             if not key.startswith("__"):
                 signal = np.ravel(mat_data[key])
@@ -112,8 +126,14 @@ if uploaded_file is not None:
 
     # Prédiction
     predictions = model.predict(img_input)
-    predicted_class = np.argmax(predictions, axis=1)[0]
+    predicted_index = np.argmax(predictions, axis=1)[0]
+    predicted_class = CLASS_NAMES[predicted_index]
 
     st.subheader("Résultat de la classification")
     st.write("Classe prédite :", predicted_class)
-    st.write("Probabilités :", predictions[0])
+
+    # Affichage des probabilités par classe
+    st.subheader("📊 Probabilités par classe")
+    all_probs = predictions[0]
+    for i, class_name in enumerate(CLASS_NAMES):
+        st.write(f"{class_name} : {all_probs[i]*100:.2f}%")
