@@ -8,5 +8,7 @@ pandas
 scipy
 pillow
 PyWavelets
+scikit-learn
+
 
 
