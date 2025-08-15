@@ -4,6 +4,7 @@ import pandas as pd
 import scipy.io as sio
 from scipy.signal import butter, filtfilt, savgol_filter
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from math import pi
 from PIL import Image
 from tensorflow.keras.models import load_model
@@ -51,7 +52,7 @@ def frft(f, a):
 MODEL_PATH = "best_model_single.h5"
 model = load_model(MODEL_PATH)
 
-# --- Interface ---
+# --- Interface Streamlit ---
 st.title("ECG → Filtrage → FrFT → Image 224x224 → Classification")
 
 uploaded_file = st.file_uploader("Chargez un fichier ECG (.mat ou .csv)", type=["mat", "csv"])
@@ -62,7 +63,7 @@ if uploaded_file is not None:
     # Charger le signal
     if uploaded_file.name.endswith(".mat"):
         mat_data = sio.loadmat(uploaded_file)
-        # Sélectionner la première clé non "__"
+        # Sélectionner la première variable qui n'est pas interne
         for key in mat_data.keys():
             if not key.startswith("__"):
                 signal = np.ravel(mat_data[key])
@@ -91,11 +92,17 @@ if uploaded_file is not None:
     ax.plot(magnitude)
     plt.tight_layout(pad=0)
 
-    fig.canvas.draw()
-    img_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    img_array = img_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    # Conversion figure -> numpy array
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    img_array = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+    img_array = img_array.reshape(fig.canvas.get_width_height()[::-1] + (4,))
     plt.close(fig)
 
+    # Garder seulement RGB
+    img_array = img_array[:, :, :3]
+
+    # Conversion en PIL + redimensionnement 224x224
     img_pil = Image.fromarray(img_array).resize((224, 224))
     st.image(img_pil, caption="Image 224x224 générée", use_container_width=True)
 
