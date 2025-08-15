@@ -66,30 +66,34 @@ if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         signal = df.iloc[:,0].values
 
+    # --- 1️⃣ Signal brut ---
     st.subheader("Signal brut")
     st.line_chart(signal)
 
-    # --- 1️⃣ Wavelet db4 ---
+    # --- 2️⃣ Filtrage Wavelet db4 ---
     coeffs = pywt.wavedec(signal, 'db4', level=4)
     filtered_signal = pywt.waverec(coeffs, 'db4')
 
-    # --- 2️⃣ PCA ---
-    signal_2d = filtered_signal.reshape(-1,1)
-    pca = PCA(n_components=1)
-    pca_signal = pca.fit_transform(signal_2d).ravel()
-
     # --- 3️⃣ Savitzky-Golay ---
-    smoothed_signal = savgol_filter(pca_signal, window_length=11, polyorder=3)
+    smoothed_signal = savgol_filter(filtered_signal, window_length=11, polyorder=3)
 
-    # --- 4️⃣ FrFT ---
-    frft_signal = frft(smoothed_signal, fraction_order)
+    st.subheader("Signal filtré (Wavelet + Savitzky-Golay)")
+    st.line_chart(smoothed_signal)
+
+    # --- 4️⃣ PCA (optionnel, pour réduire dimension avant FrFT) ---
+    pca_signal = PCA(n_components=1).fit_transform(smoothed_signal.reshape(-1,1)).ravel()
+    # st.subheader("Signal après PCA")
+    # st.line_chart(pca_signal)  # tu peux activer si tu veux voir PCA
+
+    # --- 5️⃣ FrFT ---
+    frft_signal = frft(pca_signal, fraction_order)
     magnitude = np.abs(frft_signal)
 
-    # --- 5️⃣ Normalisation et centrage ---
+    # --- 6️⃣ Normalisation et centrage ---
     scaler = StandardScaler()
     magnitude_normalized = scaler.fit_transform(magnitude.reshape(-1,1)).ravel()
 
-    # --- 6️⃣ Génération image 224x224 ---
+    # --- 7️⃣ Génération image 224x224 ---
     fig, ax = plt.subplots()
     ax.axis('off')
     ax.plot(magnitude_normalized)
@@ -105,11 +109,11 @@ if uploaded_file is not None:
     img_pil = Image.fromarray(img_array).resize((224,224))
     st.image(img_pil, caption="Image 224x224 générée", use_container_width=True)
 
-    # --- 7️⃣ Préparer pour modèle ---
+    # --- 8️⃣ Préparer pour modèle ---
     img_input = np.array(img_pil)/255.0
     img_input = np.expand_dims(img_input, axis=0)
 
-    # --- 8️⃣ Classification ---
+    # --- 9️⃣ Classification ---
     predictions = model.predict(img_input)
     predicted_index = np.argmax(predictions, axis=1)[0]
     predicted_class = CLASS_NAMES[predicted_index]
@@ -117,7 +121,7 @@ if uploaded_file is not None:
     st.subheader("Résultat de la classification")
     st.write("Classe prédite :", predicted_class)
 
-    # --- 9️⃣ Affichage probabilités ---
+    # --- 10️⃣ Affichage probabilités ---
     st.subheader("📊 Probabilités par classe")
     all_probs = predictions[0]
     for i, class_name in enumerate(CLASS_NAMES):
