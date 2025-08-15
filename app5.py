@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 import pywt
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, butter, filtfilt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
@@ -13,14 +13,14 @@ from tensorflow.keras.models import load_model
 from math import pi
 
 # --- Classes réelles ---
-CLASS_NAMES = ['F3', 'N0', 'Q4', 'S1', 'V2']  # Remplace par tes vraies classes
+CLASS_NAMES = ['F3', 'N0', 'Q4', 'S1', 'V2']
 
 # --- Charger le modèle ---
 MODEL_PATH = "best_model_single.h5"
 model = load_model(MODEL_PATH)
 
 # --- Streamlit ---
-st.title("ECG → Wavelet db4 → PCA → Savitzky-Golay → FrFT → Image 224x224 → Classification")
+st.title("ECG → Filtre passe-bande → Wavelet db4 → PCA → Savitzky-Golay → FrFT → Image 224x224 → Classification")
 
 st.subheader("📖 Description des arythmies")
 st.write("Cette application classe les battements ECG selon leur type d’arythmie :")
@@ -54,6 +54,15 @@ def frft(f, a):
     F = F * np.exp(-1j * pi * (shft**2) * tana2 / N)
     return F
 
+# --- Filtre passe-bande ---
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=4):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    y = filtfilt(b, a, data)
+    return y
+
 if uploaded_file is not None:
     # --- Charger signal ---
     if uploaded_file.name.endswith(".mat"):
@@ -70,30 +79,36 @@ if uploaded_file is not None:
     st.subheader("Signal brut")
     st.line_chart(signal)
 
-    # --- 2️⃣ Filtrage Wavelet db4 ---
-    coeffs = pywt.wavedec(signal, 'db4', level=4)
+    # --- 2️⃣ Filtre passe-bande ---
+    lowcut = 0.5
+    highcut = 40.0
+    filtered_band = butter_bandpass_filter(signal, lowcut, highcut, fs)
+    st.subheader(f"Signal après filtre passe-bande ({lowcut}-{highcut} Hz)")
+    st.line_chart(filtered_band)
+
+    # --- 3️⃣ Wavelet db4 ---
+    coeffs = pywt.wavedec(filtered_band, 'db4', level=4)
     filtered_signal = pywt.waverec(coeffs, 'db4')
 
-    # --- 3️⃣ Savitzky-Golay ---
+    # --- 4️⃣ Savitzky-Golay ---
     smoothed_signal = savgol_filter(filtered_signal, window_length=11, polyorder=3)
-
     st.subheader("Signal filtré (Wavelet + Savitzky-Golay)")
     st.line_chart(smoothed_signal)
 
-    # --- 4️⃣ PCA (optionnel, pour réduire dimension avant FrFT) ---
+    # --- 5️⃣ PCA ---
     pca_signal = PCA(n_components=1).fit_transform(smoothed_signal.reshape(-1,1)).ravel()
     # st.subheader("Signal après PCA")
-    # st.line_chart(pca_signal)  # tu peux activer si tu veux voir PCA
+    # st.line_chart(pca_signal)  # décommenter si besoin
 
-    # --- 5️⃣ FrFT ---
+    # --- 6️⃣ FrFT ---
     frft_signal = frft(pca_signal, fraction_order)
     magnitude = np.abs(frft_signal)
 
-    # --- 6️⃣ Normalisation et centrage ---
+    # --- 7️⃣ Normalisation et centrage ---
     scaler = StandardScaler()
     magnitude_normalized = scaler.fit_transform(magnitude.reshape(-1,1)).ravel()
 
-    # --- 7️⃣ Génération image 224x224 ---
+    # --- 8️⃣ Génération image 224x224 ---
     fig, ax = plt.subplots()
     ax.axis('off')
     ax.plot(magnitude_normalized)
@@ -109,11 +124,11 @@ if uploaded_file is not None:
     img_pil = Image.fromarray(img_array).resize((224,224))
     st.image(img_pil, caption="Image 224x224 générée", use_container_width=True)
 
-    # --- 8️⃣ Préparer pour modèle ---
+    # --- 9️⃣ Préparer pour modèle ---
     img_input = np.array(img_pil)/255.0
     img_input = np.expand_dims(img_input, axis=0)
 
-    # --- 9️⃣ Classification ---
+    # --- 10️⃣ Classification ---
     predictions = model.predict(img_input)
     predicted_index = np.argmax(predictions, axis=1)[0]
     predicted_class = CLASS_NAMES[predicted_index]
@@ -121,7 +136,7 @@ if uploaded_file is not None:
     st.subheader("Résultat de la classification")
     st.write("Classe prédite :", predicted_class)
 
-    # --- 10️⃣ Affichage probabilités ---
+    # --- 11️⃣ Affichage probabilités ---
     st.subheader("📊 Probabilités par classe")
     all_probs = predictions[0]
     for i, class_name in enumerate(CLASS_NAMES):
